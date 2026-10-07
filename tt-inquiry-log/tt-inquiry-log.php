@@ -207,8 +207,7 @@ final class TT_Inquiry_Log {
 			self::redirect_done();
 		}
 
-		$raw = wp_unslash( $_POST );
-		list( $data, $errors ) = self::validate( $raw );
+		list( $data, $errors ) = self::validate( self::posted_fields() );
 
 		$key   = self::client_key();
 		$count = (int) get_transient( $key );
@@ -234,12 +233,32 @@ final class TT_Inquiry_Log {
 		self::redirect_done();
 	}
 
+	/**
+	 * フォーム項目の name 属性。
+	 * 「name」「category」等は WordPress の予約クエリ変数と衝突し、
+	 * 入力エラー時に 404 ページになってしまうため、必ず接頭辞を付ける。
+	 */
+	public static function field_name( $key ) {
+		return 'tt_inq_' . $key;
+	}
+
+	/** 送信された項目を、接頭辞なしのキーで取り出す（unslash 済み） */
+	private static function posted_fields() {
+		$in = array();
+		foreach ( array( 'name', 'email', 'phone', 'category', 'message', 'consent' ) as $k ) {
+			$field    = self::field_name( $k );
+			$in[ $k ] = isset( $_POST[ $field ] ) ? wp_unslash( $_POST[ $field ] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce は handle_submit で確認済み、整形は validate() で行う
+		}
+		return $in;
+	}
+
 	private static function collect_old() {
+		$in  = self::posted_fields();
 		$old = array();
 		foreach ( array( 'name', 'email', 'phone', 'category', 'message' ) as $k ) {
-			$old[ $k ] = isset( $_POST[ $k ] ) ? sanitize_textarea_field( wp_unslash( $_POST[ $k ] ) ) : '';
+			$old[ $k ] = sanitize_textarea_field( (string) $in[ $k ] );
 		}
-		$old['consent'] = ! empty( $_POST['consent'] );
+		$old['consent'] = ! empty( $in['consent'] );
 		return $old;
 	}
 
@@ -349,26 +368,26 @@ final class TT_Inquiry_Log {
 				</div>
 
 				<label>お名前<span class="tt-req">必須</span>
-					<input type="text" name="name" maxlength="100" value="<?php echo esc_attr( $old['name'] ); ?>" autocomplete="name">
+					<input type="text" name="<?php echo esc_attr( self::field_name( 'name' ) ); ?>" maxlength="100" value="<?php echo esc_attr( $old['name'] ); ?>" autocomplete="name">
 				</label>
 				<label>メールアドレス<span class="tt-req">必須</span>
-					<input type="email" name="email" value="<?php echo esc_attr( $old['email'] ); ?>" autocomplete="email">
+					<input type="email" name="<?php echo esc_attr( self::field_name( 'email' ) ); ?>" value="<?php echo esc_attr( $old['email'] ); ?>" autocomplete="email">
 				</label>
 				<label>電話番号（任意）
-					<input type="tel" name="phone" value="<?php echo esc_attr( $old['phone'] ); ?>" autocomplete="tel" placeholder="090-1234-5678">
+					<input type="tel" name="<?php echo esc_attr( self::field_name( 'phone' ) ); ?>" value="<?php echo esc_attr( $old['phone'] ); ?>" autocomplete="tel" placeholder="090-1234-5678">
 				</label>
 				<label>ご相談の種類<span class="tt-req">必須</span>
-					<select name="category">
+					<select name="<?php echo esc_attr( self::field_name( 'category' ) ); ?>">
 						<?php foreach ( self::categories() as $k => $label ) : ?>
 							<option value="<?php echo esc_attr( $k ); ?>" <?php selected( $old['category'], $k ); ?>><?php echo esc_html( $label ); ?></option>
 						<?php endforeach; ?>
 					</select>
 				</label>
 				<label>お問い合わせ内容<span class="tt-req">必須</span>
-					<textarea name="message" rows="6" maxlength="<?php echo esc_attr( self::MESSAGE_MAX_LEN ); ?>"><?php echo esc_textarea( $old['message'] ); ?></textarea>
+					<textarea name="<?php echo esc_attr( self::field_name( 'message' ) ); ?>" rows="6" maxlength="<?php echo esc_attr( self::MESSAGE_MAX_LEN ); ?>"><?php echo esc_textarea( $old['message'] ); ?></textarea>
 				</label>
 				<label class="tt-consent">
-					<input type="checkbox" name="consent" value="1" <?php checked( $old['consent'] ); ?>>
+					<input type="checkbox" name="<?php echo esc_attr( self::field_name( 'consent' ) ); ?>" value="1" <?php checked( $old['consent'] ); ?>>
 					ご入力いただいた情報は、お問い合わせへの対応の目的にのみ利用することに同意します。
 				</label>
 				<button type="submit">送信する</button>
